@@ -2,15 +2,31 @@ import json
 from collections import namedtuple
 from collections.abc import MutableMapping
 
-from graphql import (ExecutionResult, GraphQLError, execute, get_operation_ast,
-                     parse, validate)
+from graphql import (
+    ExecutionResult,
+    GraphQLError,
+    execute,
+    get_operation_ast,
+    parse,
+    validate,
+)
 from graphql import format_error as format_error_default
 
 from .error import HttpQueryError
 
 # Necessary only for static type checking
 from typing import (
-    Any, Callable, Dict, List, Optional, Tuple, Type, Union, TYPE_CHECKING)
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    TYPE_CHECKING,
+)
+
 if TYPE_CHECKING:
     from graphql import GraphQLSchema  # noqa: F401
 
@@ -24,7 +40,7 @@ GraphQLResponse = namedtuple("GraphQLResponse", "result,status_code")
 
 
 def run_http_query(
-    schema: 'GraphQLSchema',
+    schema: "GraphQLSchema",
     request_method: str,
     data: Union[Dict, List[Dict]],
     query_data: Optional[Dict] = None,
@@ -39,9 +55,7 @@ def run_http_query(
             headers={"Allow": "GET, POST"},
         )
     if catch:
-        catch_exc: Union[Type[HttpQueryError], Type[SkipException]] = (
-            HttpQueryError
-        )
+        catch_exc: Union[Type[HttpQueryError], Type[SkipException]] = HttpQueryError
     else:
         catch_exc = SkipException
     is_batch = isinstance(data, list)
@@ -102,8 +116,7 @@ def json_encode(data: Dict, pretty: bool = False) -> str:
     return json.dumps(data, indent=2, separators=(",", ": "))
 
 
-def load_json_variables(
-        variables: Optional[Union[str, Dict]]) -> Optional[Dict]:
+def load_json_variables(variables: Optional[Union[str, Dict]]) -> Optional[Dict]:
     if variables and isinstance(variables, str):
         try:
             return json.loads(variables)
@@ -122,16 +135,14 @@ def get_graphql_params(data: Dict, query_data: Dict) -> GraphQLParams:
 
 
 def get_response(
-    schema: 'GraphQLSchema',
+    schema: "GraphQLSchema",
     params: GraphQLParams,
     catch: Type[BaseException],
     allow_only_query: bool = False,
     **kwargs: Dict
 ) -> Optional[ExecutionResult]:
     try:
-        execution_result = execute_graphql_request(
-            schema, params, allow_only_query
-        )
+        execution_result = execute_graphql_request(schema, params, allow_only_query)
     except catch:
         return None
 
@@ -140,7 +151,7 @@ def get_response(
 
 def format_execution_result(
     execution_result: Optional[ExecutionResult],
-    format_error: Optional[Callable[[Exception], Dict]] = None
+    format_error: Optional[Callable[[Exception], Dict]] = None,
 ) -> GraphQLResponse:
     status_code = 200
 
@@ -149,10 +160,9 @@ def format_execution_result(
         if execution_result.errors:
             if not format_error:
                 format_errors = format_error_default
-            response = {'errors': [
-                format_errors(e) for e in execution_result.errors]}
+            response = {"errors": [format_errors(e) for e in execution_result.errors]}
         else:
-            response = {'data': execution_result.data}
+            response = {"data": execution_result.data}
     else:
         response = None
 
@@ -160,9 +170,7 @@ def format_execution_result(
 
 
 def execute_graphql_request(
-    schema: 'GraphQLSchema',
-    params: GraphQLParams,
-    allow_only_query: bool = False,
+    schema: "GraphQLSchema", params: GraphQLParams, allow_only_query: bool = False
 ):
     if not params.query:
         raise HttpQueryError(400, "Must provide query string.")
@@ -177,7 +185,7 @@ def execute_graphql_request(
 
     if allow_only_query:
         operation_ast = get_operation_ast(document, params.operation_name)
-        if operation_ast and operation_ast.operation.value != 'query':
+        if operation_ast and operation_ast.operation.value != "query":
             raise HttpQueryError(
                 405,
                 "Can only perform a {} operation from a POST request.".format(
@@ -194,9 +202,11 @@ def execute_graphql_request(
         return ExecutionResult(data=None, errors=validation_errors)
 
     return execute(
-        schema, document,
+        schema,
+        document,
         variable_values=params.variables,
-        operation_name=params.operation_name)
+        operation_name=params.operation_name,
+    )
 
 
 def load_json_body(data: str) -> Dict:
@@ -207,6 +217,7 @@ def load_json_body(data: str) -> Dict:
 
 
 __all__ = [
+    "GraphQLParams",
     "HttpQueryError",
     "SkipException",
     "run_http_query",
