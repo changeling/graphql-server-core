@@ -8,16 +8,24 @@ from graphql import (
 )
 
 
-def resolve_raises(*_):
+def resolve_thrower(*_args):
     raise Exception("Throws!")
+
+
+def resolve_request(_obj, info):
+    return info.context.get('q')
+
+
+def resolve_context(_obj, info):
+    return str(info.context)
 
 
 QueryRootType = GraphQLObjectType(
     name="QueryRoot",
     fields={
-        "thrower": GraphQLField(GraphQLNonNull(GraphQLString), resolve=resolve_raises),
-        "request": GraphQLField(GraphQLNonNull(GraphQLString)),
-        "context": GraphQLField(GraphQLNonNull(GraphQLString)),
+        "thrower": GraphQLField(GraphQLNonNull(GraphQLString), resolve=resolve_thrower),
+        "request": GraphQLField(GraphQLNonNull(GraphQLString), resolve=resolve_request),
+        "context": GraphQLField(GraphQLNonNull(GraphQLString), resolve=resolve_context),
         "test": GraphQLField(
             type_=GraphQLString,
             args={"who": GraphQLArgument(GraphQLString)},

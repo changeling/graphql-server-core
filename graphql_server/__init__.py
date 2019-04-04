@@ -46,7 +46,7 @@ def run_http_query(
     query_data: Optional[Dict] = None,
     batch_enabled: bool = False,
     catch: bool = False,
-    **execute_options: Dict
+    **execute_options
 ):
     if request_method not in ("get", "post"):
         raise HttpQueryError(
@@ -128,7 +128,6 @@ def load_json_variables(variables: Optional[Union[str, Dict]]) -> Optional[Dict]
 def get_graphql_params(data: Dict, query_data: Dict) -> GraphQLParams:
     query = data.get("query") or query_data.get("query")
     variables = data.get("variables") or query_data.get("variables")
-    # document_id = data.get('documentId')
     operation_name = data.get("operationName") or query_data.get("operationName")
 
     return GraphQLParams(query, load_json_variables(variables), operation_name)
@@ -139,10 +138,12 @@ def get_response(
     params: GraphQLParams,
     catch: Type[BaseException],
     allow_only_query: bool = False,
-    **kwargs: Dict
+    **kwargs
 ) -> Optional[ExecutionResult]:
     try:
-        execution_result = execute_graphql_request(schema, params, allow_only_query)
+        execution_result = execute_graphql_request(
+            schema, params, allow_only_query, **kwargs
+        )
     except catch:
         return None
 
@@ -170,7 +171,10 @@ def format_execution_result(
 
 
 def execute_graphql_request(
-    schema: "GraphQLSchema", params: GraphQLParams, allow_only_query: bool = False
+    schema: "GraphQLSchema",
+    params: GraphQLParams,
+    allow_only_query: bool = False,
+    **kwargs
 ):
     if not params.query:
         raise HttpQueryError(400, "Must provide query string.")
@@ -206,10 +210,11 @@ def execute_graphql_request(
         document,
         variable_values=params.variables,
         operation_name=params.operation_name,
+        **kwargs
     )
 
 
-def load_json_body(data: str) -> Dict:
+def load_json_body(data: str) -> Union[Dict, List]:
     try:
         return json.loads(data)
     except Exception:

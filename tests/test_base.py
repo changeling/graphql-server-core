@@ -2,8 +2,8 @@ from pytest import raises
 import json
 
 from graphql_server import (
+    json_encode,
     load_json_body,
-    load_json_variables,
     run_http_query,
     GraphQLParams,
     HttpQueryError,
@@ -102,10 +102,10 @@ def test_errors_when_missing_operation_name():
             ],
         )
     ]
+    assert results[0].errors[0].__class__.__name__ == 'GraphQLError'
 
 
 def test_errors_when_sending_a_mutation_via_get():
-
     with raises(HttpQueryError) as exc_info:
         run_http_query(
             schema,
@@ -169,221 +169,199 @@ def test_allows_post_with_json_encoding():
     assert result == {"query": "{test}"}
 
 
-# def test_allows_sending_a_mutation_via_post(client):
-#     response = client.post(
-#         url_string(),
-#         data=j(query="mutation TestMutation { writeTest { test } }"),
-#         content_type="application/json",
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {"data": {"writeTest": {"test": "Hello World"}}}
+def test_allows_sending_a_mutation_via_post():
+    results, params = run_http_query(
+        schema,
+        "post",
+        {},
+        query_data=dict(query="mutation TestMutation { writeTest { test } }"),
+    )
+
+    assert results == [({"writeTest": {"test": "Hello World"}}, None)]
 
 
-# def test_allows_post_with_url_encoding(client):
-#     response = client.post(
-#         url_string(),
-#         data=urlencode(dict(query="{test}")),
-#         content_type="application/x-www-form-urlencoded",
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {"data": {"test": "Hello World"}}
+def test_allows_post_with_url_encoding():
+    results, params = run_http_query(
+        schema, "post", {}, query_data=dict(query="{test}")
+    )
+
+    assert results == [({"test": "Hello World"}, None)]
 
 
-# def test_supports_post_json_query_with_string_variables(client):
-#     response = client.post(url_string(), data=j(
-#         query='query helloWho($who: String){ test(who: $who) }',
-#         variables=json.dumps({'who': "Dolly"})
-#     ), content_type='application/json')
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello Dolly"}
-#     }
+def test_supports_post_json_query_with_string_variables():
+    results, params = run_http_query(
+        schema,
+        "post",
+        {},
+        query_data=dict(
+            query="query helloWho($who: String){ test(who: $who) }",
+            variables='{"who": "Dolly"}',
+        ),
+    )
+
+    assert results == [({"test": "Hello Dolly"}, None)]
 
 
-# def test_supports_post_json_query_with_json_variables(client):
-#     response = client.post(url_string(), data=j(
-#         query='query helloWho($who: String){ test(who: $who) }',
-#         variables={'who': "Dolly"}
-#     ), content_type='application/json')
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello Dolly"}
-#     }
+def test_supports_post_json_query_with_json_variables():
+    result = load_json_body(
+        """
+        {
+            "query": "query helloWho($who: String){ test(who: $who) }",
+            "variables": {"who": "Dolly"}
+        }
+        """
+    )
+
+    assert result["variables"] == {"who": "Dolly"}
 
 
-# def test_supports_post_url_encoded_query_with_string_variables(client):
-#     response = client.post(url_string(), data=urlencode(dict(
-#         query='query helloWho($who: String){ test(who: $who) }',
-#         variables=json.dumps({'who': "Dolly"})
-#     )), content_type='application/x-www-form-urlencoded')
+def test_supports_post_url_encoded_query_with_string_variables():
+    results, params = run_http_query(
+        schema,
+        "post",
+        {},
+        query_data=dict(
+            query="query helloWho($who: String){ test(who: $who) }",
+            variables='{"who": "Dolly"}',
+        ),
+    )
 
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello Dolly"}
-#     }
-
-
-# def test_supports_post_json_quey_with_get_variable_values(client):
-#     response = client.post(url_string(
-#         variables=json.dumps({'who': "Dolly"})
-#     ), data=j(
-#         query='query helloWho($who: String){ test(who: $who) }',
-#     ), content_type='application/json')
-
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello Dolly"}
-#     }
+    assert results == [({"test": "Hello Dolly"}, None)]
 
 
-# def test_post_url_encoded_query_with_get_variable_values(client):
-#     response = client.post(url_string(
-#         variables=json.dumps({'who': "Dolly"})
-#     ), data=urlencode(dict(
-#         query='query helloWho($who: String){ test(who: $who) }',
-#     )), content_type='application/x-www-form-urlencoded')
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello Dolly"}
-#     }
+def test_supports_post_json_query_with_get_variable_values():
+    results, params = run_http_query(
+        schema,
+        "post",
+        data=dict(query="query helloWho($who: String){ test(who: $who) }"),
+        query_data=dict(variables={"who": "Dolly"}),
+    )
+
+    assert results == [({"test": "Hello Dolly"}, None)]
 
 
-# def test_supports_post_raw_text_query_with_get_variable_values(client):
-#     response = client.post(url_string(
-#         variables=json.dumps({'who': "Dolly"})
-#     ),
-#         data='query helloWho($who: String){ test(who: $who) }',
-#         content_type='application/graphql'
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello Dolly"}
-#     }
+def test_post_url_encoded_query_with_get_variable_values():
+    results, params = run_http_query(
+        schema,
+        "get",
+        data=dict(query="query helloWho($who: String){ test(who: $who) }"),
+        query_data=dict(variables='{"who": "Dolly"}'),
+    )
+
+    assert results == [({"test": "Hello Dolly"}, None)]
 
 
-# def test_allows_post_with_operation_name(client):
-#     response = client.post(url_string(), data=j(
-#         query='''
-#         query helloYou { test(who: "You"), ...shared }
-#         query helloWorld { test(who: "World"), ...shared }
-#         query helloDolly { test(who: "Dolly"), ...shared }
-#         fragment shared on QueryRoot {
-#           shared: test(who: "Everyone")
-#         }
-#         ''',
-#         operationName='helloWorld'
-#     ), content_type='application/json')
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {
-#             'test': 'Hello World',
-#             'shared': 'Hello Everyone'
-#         }
-#     }
+def test_supports_post_raw_text_query_with_get_variable_values():
+    results, params = run_http_query(
+        schema,
+        "get",
+        data=dict(query="query helloWho($who: String){ test(who: $who) }"),
+        query_data=dict(variables='{"who": "Dolly"}'),
+    )
+
+    assert results == [({"test": "Hello Dolly"}, None)]
 
 
-# def test_allows_post_with_get_operation_name(client):
-#     response = client.post(url_string(
-#         operationName='helloWorld'
-#     ), data='''
-#     query helloYou { test(who: "You"), ...shared }
-#     query helloWorld { test(who: "World"), ...shared }
-#     query helloDolly { test(who: "Dolly"), ...shared }
-#     fragment shared on QueryRoot {
-#       shared: test(who: "Everyone")
-#     }
-#     ''',
-#         content_type='application/graphql')
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {
-#             'test': 'Hello World',
-#             'shared': 'Hello Everyone'
-#         }
-#     }
+def test_allows_post_with_operation_name():
+    results, params = run_http_query(
+        schema,
+        "get",
+        data=dict(
+            query="""
+            query helloYou { test(who: "You"), ...shared }
+            query helloWorld { test(who: "World"), ...shared }
+            query helloDolly { test(who: "Dolly"), ...shared }
+            fragment shared on QueryRoot {
+              shared: test(who: "Everyone")
+            }
+            """,
+            operationName="helloWorld",
+        ),
+    )
+
+    assert results == [({"test": "Hello World", "shared": "Hello Everyone"}, None)]
 
 
-# @pytest.mark.parametrize('app', [create_app(pretty=True)])
-# def test_supports_pretty_printing(client):
-#     response = client.get(url_string(query='{test}'))
-#
-#     assert response.data.decode() == (
-#         '{\n'
-#         '  "data": {\n'
-#         '    "test": "Hello World"\n'
-#         '  }\n'
-#         '}'
-#     )
+def test_allows_post_with_get_operation_name():
+    results, params = run_http_query(
+        schema,
+        "get",
+        data=dict(
+            query="""
+            query helloYou { test(who: "You"), ...shared }
+            query helloWorld { test(who: "World"), ...shared }
+            query helloDolly { test(who: "Dolly"), ...shared }
+            fragment shared on QueryRoot {
+              shared: test(who: "Everyone")
+            }
+            """
+        ),
+        query_data=dict(operationName="helloWorld"),
+    )
+
+    assert results == [({"test": "Hello World", "shared": "Hello Everyone"}, None)]
 
 
-# @pytest.mark.parametrize('app', [create_app(pretty=False)])
-# def test_not_pretty_by_default(client):
-#     response = client.get(url_string(query='{test}'))
-#
-#     assert response.data.decode() == (
-#         '{"data":{"test":"Hello World"}}'
-#     )
+def test_supports_pretty_printing_data():
+    results, params = run_http_query(schema, "get", data=dict(query="{test}"))
+    result = {"data": results[0].data}
+
+    assert json_encode(result, pretty=True) == (
+        "{\n" '  "data": {\n' '    "test": "Hello World"\n' "  }\n" "}"
+    )
 
 
-# def test_supports_pretty_printing_by_request(client):
-#     response = client.get(url_string(query='{test}', pretty='1'))
-#
-#     assert response.data.decode() == (
-#         '{\n'
-#         '  "data": {\n'
-#         '    "test": "Hello World"\n'
-#         '  }\n'
-#         '}'
-#     )
+def test_not_pretty_data_by_default():
+    results, params = run_http_query(schema, "get", data=dict(query="{test}"))
+    result = {"data": results[0].data}
+
+    assert json_encode(result) == '{"data":{"test":"Hello World"}}'
 
 
-# def test_handles_field_errors_caught_by_graphql(client):
-#     response = client.get(url_string(query='{thrower}'))
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': None,
-#         'errors': [{'locations': [{'column': 2, 'line': 1}], 'message': 'Throws!'}]
-#     }
+def test_handles_field_errors_caught_by_graphql():
+    results, params = run_http_query(schema, "get", data=dict(query="{thrower}"))
+
+    assert results == [
+        (None, [{"message": "Throws!", "locations": [(1, 2)], "path": ["thrower"]}])
+    ]
 
 
-# def test_handles_syntax_errors_caught_by_graphql(client):
-#     response = client.get(url_string(query="syntaxerror"))
-#     assert response.status_code == 400
-#     assert response_json(response) == {
-#         "errors": [
-#             {
-#                 "locations": [{"column": 1, "line": 1}],
-#                 "message": "Syntax Error GraphQL request (1:1) "
-#                            'Unexpected Name "syntaxerror"\n\n1: syntaxerror\n   ^\n',
-#             }
-#         ]
-#     }
+def test_handles_syntax_errors_caught_by_graphql():
+    results, params = run_http_query(schema, "get", data=dict(query="syntaxerror"))
+
+    assert results == [
+        (
+            None,
+            [
+                {
+                    "locations": [(1, 1)],
+                    "message": "Syntax Error: Unexpected Name 'syntaxerror'",
+                }
+            ],
+        )
+    ]
 
 
-# def test_handles_errors_caused_by_a_lack_of_query(client):
-#     response = client.get(url_string())
-#
-#     assert response.status_code == 400
-#     assert response_json(response) == {
-#         'errors': [{'message': 'Must provide query string.'}]
-#     }
+def test_handles_errors_caused_by_a_lack_of_query():
+    with raises(HttpQueryError) as exc_info:
+        run_http_query(schema, "get", {})
+
+    assert exc_info.value == HttpQueryError(400, "Must provide query string.")
 
 
-# def test_handles_batch_correctly_if_is_disabled(client):
-#     response = client.post(url_string(), data='[]', content_type='application/json')
+def test_handles_errors_caused_by_invalid_query_type():
+    results, params = run_http_query(schema, "get", dict(query=42))
 
-#     assert response.status_code == 400
-#     assert response_json(response) == {
-#         'errors': [{'message': 'Batch GraphQL requests are not enabled.'}]
-#     }
+    assert results == [(None, [{'message': 'Must provide Source. Received: 42'}])]
+
+
+def test_handles_batch_correctly_if_is_disabled():
+    with raises(HttpQueryError) as exc_info:
+        run_http_query(schema, "post", [])
+
+    assert exc_info.value == HttpQueryError(
+        400, "Batch GraphQL requests are not enabled."
+    )
 
 
 def test_handles_incomplete_json_bodies():
@@ -395,14 +373,22 @@ def test_handles_incomplete_json_bodies():
 
 def test_handles_plain_post_text():
     with raises(HttpQueryError) as exc_info:
-        run_http_query(schema, "get", {}, query_data={})
+        run_http_query(schema, "post", {})
 
     assert exc_info.value == HttpQueryError(400, "Must provide query string.")
 
 
 def test_handles_poorly_formed_variables():
     with raises(HttpQueryError) as exc_info:
-        load_json_variables("who:You")
+        run_http_query(
+            schema,
+            "get",
+            {},
+            query_data=dict(
+                query="query helloWho($who: String){ test(who: $who) }",
+                variables="who:You",
+            ),
+        )
 
     assert exc_info.value == HttpQueryError(400, "Variables are invalid JSON.")
 
@@ -418,104 +404,69 @@ def test_handles_unsupported_http_methods():
     )
 
 
-# def test_passes_request_into_request_context(client):
-#     response = client.get(url_string(query='{request}', q='testing'))
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {
-#             'request': 'testing'
-#         }
-#     }
+def test_passes_request_into_request_context():
+    results, params = run_http_query(
+        schema,
+        "get",
+        {},
+        query_data=dict(query="{request}"),
+        context_value={"q": "testing"},
+    )
+
+    assert results == [({"request": "testing"}, None)]
 
 
-# @pytest.mark.parametrize('app', [create_app(get_context=lambda:"CUSTOM CONTEXT")])
-# def test_supports_pretty_printing(client):
-#     response = client.get(url_string(query='{context}'))
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {
-#             'context': 'CUSTOM CONTEXT'
-#         }
-#     }
+def test_supports_pretty_printing_context():
+    class Context:
+        def __str__(self):
+            return "CUSTOM CONTEXT"
+
+    results, params = run_http_query(
+        schema, "get", {}, query_data=dict(query="{context}"), context_value=Context()
+    )
+
+    assert results == [({"context": "CUSTOM CONTEXT"}, None)]
 
 
-# def test_post_multipart_data(client):
-#     query = "mutation TestMutation { writeTest { test } }"
-#     response = client.post(
-#         url_string(),
-#         data={"query": query, "file": (StringIO(), "text1.txt")},
-#         content_type="multipart/form-data",
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         "data": {u"writeTest": {u"test": u"Hello World"}}
-#     }
+def test_post_multipart_data():
+    query = "mutation TestMutation { writeTest { test } }"
+    results, params = run_http_query(schema, "post", {}, query_data=dict(query=query))
+
+    assert results == [({"writeTest": {"test": "Hello World"}}, None)]
 
 
-# @pytest.mark.parametrize('app', [create_app(batch=True)])
-# def test_batch_allows_post_with_json_encoding(client):
-#     response = client.post(
-#         url_string(),
-#         data=jl(
-#             # id=1,
-#             query='{test}'
-#         ),
-#         content_type='application/json'
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == [{
-#         # 'id': 1,
-#         'data': {'test': "Hello World"}
-#     }]
+def test_batch_allows_post_with_json_encoding():
+    data = load_json_body('[{"query": "{test}"}]')
+    results, params = run_http_query(schema, "post", data, batch_enabled=True)
+
+    assert results == [({"test": "Hello World"}, None)]
 
 
-# @pytest.mark.parametrize('app', [create_app(batch=True)])
-# def test_batch_supports_post_json_query_with_json_variables(client):
-#     response = client.post(
-#         url_string(),
-#         data=jl(
-#             # id=1,
-#             query='query helloWho($who: String){ test(who: $who) }',
-#             variables={'who': "Dolly"}
-#         ),
-#         content_type='application/json'
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == [{
-#         # 'id': 1,
-#         'data': {'test': "Hello Dolly"}
-#     }]
+def test_batch_supports_post_json_query_with_json_variables():
+    data = load_json_body(
+        '[{"query":"query helloWho($who: String){ test(who: $who) }",'
+        '"variables":{"who":"Dolly"}}]'
+    )
+    results, params = run_http_query(schema, "post", data, batch_enabled=True)
+
+    assert results == [({"test": "Hello Dolly"}, None)]
 
 
-# @pytest.mark.parametrize('app', [create_app(batch=True)])
-# def test_batch_allows_post_with_operation_name(client):
-#     response = client.post(
-#         url_string(),
-#         data=jl(
-#             # id=1,
-#             query='''
-#             query helloYou { test(who: "You"), ...shared }
-#             query helloWorld { test(who: "World"), ...shared }
-#             query helloDolly { test(who: "Dolly"), ...shared }
-#             fragment shared on QueryRoot {
-#               shared: test(who: "Everyone")
-#             }
-#             ''',
-#             operationName='helloWorld'
-#         ),
-#         content_type='application/json'
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == [{
-#         # 'id': 1,
-#         'data': {
-#             'test': 'Hello World',
-#             'shared': 'Hello Everyone'
-#         }
-#     }]
+def test_batch_allows_post_with_operation_name():
+    data = [
+        dict(
+            query="""
+            query helloYou { test(who: "You"), ...shared }
+            query helloWorld { test(who: "World"), ...shared }
+            query helloDolly { test(who: "Dolly"), ...shared }
+            fragment shared on QueryRoot {
+              shared: test(who: "Everyone")
+            }
+            """,
+            operationName="helloWorld",
+        )
+    ]
+    data = load_json_body(json_encode(data))
+    results, params = run_http_query(schema, "post", data, batch_enabled=True)
+
+    assert results == [({"test": "Hello World", "shared": "Hello Everyone"}, None)]
