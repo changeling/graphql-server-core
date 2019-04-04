@@ -4,12 +4,14 @@ from collections.abc import MutableMapping
 
 from graphql import (ExecutionResult, GraphQLError, execute, get_operation_ast,
                      parse, validate)
+from graphql import format_error as format_error_default
 
 from .error import HttpQueryError
 
-# Necessary for static type checking
-if False:
-    from typing import List, Dict, Optional, Tuple, Any, Union, Callable, Type  # noqa: F401
+# Necessary only for static type checking
+from typing import (
+    Any, Callable, Dict, List, Optional, Tuple, Type, Union, TYPE_CHECKING)
+if TYPE_CHECKING:
     from graphql import GraphQLSchema  # noqa: F401
 
 
@@ -22,13 +24,13 @@ GraphQLResponse = namedtuple("GraphQLResponse", "result,status_code")
 
 
 def run_http_query(
-    schema,  # type: GraphQLSchema
-    request_method,  # type: str
-    data,  # type: Union[Dict, List[Dict]]
-    query_data=None,  # type: Optional[Dict]
-    batch_enabled=False,  # type: bool
-    catch=False,  # type: bool
-    **execute_options  # type: Dict
+    schema: 'GraphQLSchema',
+    request_method: str,
+    data: Union[Dict, List[Dict]],
+    query_data: Optional[Dict] = None,
+    batch_enabled: bool = False,
+    catch: bool = False,
+    **execute_options: Dict
 ):
     if request_method not in ("get", "post"):
         raise HttpQueryError(
@@ -37,9 +39,9 @@ def run_http_query(
             headers={"Allow": "GET, POST"},
         )
     if catch:
-        catch_exc = (
+        catch_exc: Union[Type[HttpQueryError], Type[SkipException]] = (
             HttpQueryError
-        )  # type: Union[Type[HttpQueryError], Type[SkipException]]
+        )
     else:
         catch_exc = SkipException
     is_batch = isinstance(data, list)
@@ -59,7 +61,7 @@ def run_http_query(
     if not data:
         raise HttpQueryError(400, "Received an empty list in the batch request.")
 
-    extra_data = {}  # type: Dict[str, Any]
+    extra_data: Dict[str, Any] = {}
     # If is a batch request, we don't consume the data from the query
     if not is_batch:
         extra_data = query_data or {}
@@ -75,12 +77,11 @@ def run_http_query(
 
 
 def encode_execution_results(
-    execution_results,  # type: List[Optional[ExecutionResult]]
-    format_error,  # type: Callable[[Exception], Dict]
-    is_batch,  # type: bool
-    encode,  # type: Callable[[Dict], Any]
-):
-    # type: (...) -> Tuple[Any, int]
+    execution_results: List[Optional[ExecutionResult]],
+    format_error: Callable[[Exception], Dict],
+    is_batch: bool,
+    encode: Callable[[Dict], Any],
+) -> Tuple[Any, int]:
     responses = [
         format_execution_result(execution_result, format_error)
         for execution_result in execution_results
@@ -94,16 +95,15 @@ def encode_execution_results(
     return encode(result), status_code
 
 
-def json_encode(data, pretty=False):
-    # type: (Dict, bool) -> str
+def json_encode(data: Dict, pretty: bool = False) -> str:
     if not pretty:
         return json.dumps(data, separators=(",", ":"))
 
     return json.dumps(data, indent=2, separators=(",", ": "))
 
 
-def load_json_variables(variables):
-    # type: (Optional[Union[str, Dict]]) -> Optional[Dict]
+def load_json_variables(
+        variables: Optional[Union[str, Dict]]) -> Optional[Dict]:
     if variables and isinstance(variables, str):
         try:
             return json.loads(variables)
@@ -112,8 +112,7 @@ def load_json_variables(variables):
     return variables  # type: ignore
 
 
-def get_graphql_params(data, query_data):
-    # type: (Dict, Dict) -> GraphQLParams
+def get_graphql_params(data: Dict, query_data: Dict) -> GraphQLParams:
     query = data.get("query") or query_data.get("query")
     variables = data.get("variables") or query_data.get("variables")
     # document_id = data.get('documentId')
@@ -123,16 +122,15 @@ def get_graphql_params(data, query_data):
 
 
 def get_response(
-    schema,  # type: GraphQLSchema
-    params,  # type: GraphQLParams
-    catch,  # type: Type[BaseException]
-    allow_only_query=False,  # type: bool
-    **kwargs  # type: Dict
-):
-    # type: (...) -> Optional[ExecutionResult]
+    schema: 'GraphQLSchema',
+    params: GraphQLParams,
+    catch: Type[BaseException],
+    allow_only_query: bool = False,
+    **kwargs: Dict
+) -> Optional[ExecutionResult]:
     try:
         execution_result = execute_graphql_request(
-            schema, params, allow_only_query, **kwargs
+            schema, params, allow_only_query
         )
     except catch:
         return None
@@ -141,16 +139,20 @@ def get_response(
 
 
 def format_execution_result(
-    execution_result,  # type: Optional[ExecutionResult]
-    format_error,  # type: Optional[Callable[[Exception], Dict]]
-):
-    # type: (...) -> GraphQLResponse
+    execution_result: Optional[ExecutionResult],
+    format_error: Optional[Callable[[Exception], Dict]] = None
+) -> GraphQLResponse:
     status_code = 200
 
+    response: Optional[Dict[str, Any]]
     if execution_result:
-        if execution_result.invalid:
-            status_code = 400
-        response = execution_result.to_dict(format_error=format_error)
+        if execution_result.errors:
+            if not format_error:
+                format_errors = format_error_default
+            response = {'errors': [
+                format_errors(e) for e in execution_result.errors]}
+        else:
+            response = {'data': execution_result.data}
     else:
         response = None
 
@@ -158,9 +160,9 @@ def format_execution_result(
 
 
 def execute_graphql_request(
-    schema,  # type: GraphQLSchema
-    params,  # type: GraphQLParams
-    allow_only_query=False,  # type: bool
+    schema: 'GraphQLSchema',
+    params: GraphQLParams,
+    allow_only_query: bool = False,
 ):
     if not params.query:
         raise HttpQueryError(400, "Must provide query string.")
@@ -197,8 +199,7 @@ def execute_graphql_request(
         operation_name=params.operation_name)
 
 
-def load_json_body(data):
-    # type: (str) -> Dict
+def load_json_body(data: str) -> Dict:
     try:
         return json.loads(data)
     except Exception:
