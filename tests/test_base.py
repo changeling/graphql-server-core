@@ -1,7 +1,13 @@
 from pytest import raises
 import json
 
-from graphql_server import run_http_query, GraphQLParams, HttpQueryError
+from graphql_server import (
+    load_json_body,
+    load_json_variables,
+    run_http_query,
+    GraphQLParams,
+    HttpQueryError,
+)
 from .schema import schema
 
 
@@ -119,48 +125,48 @@ def test_errors_when_sending_a_mutation_via_get():
     )
 
 
-# def test_errors_when_selecting_a_mutation_within_a_get(client):
-#     response = client.get(url_string(
-#         query='''
-#         query TestQuery { test }
-#         mutation TestMutation { writeTest { test } }
-#         ''',
-#         operationName='TestMutation'
-#     ))
+def test_errors_when_selecting_a_mutation_within_a_get():
+    with raises(HttpQueryError) as exc_info:
+        run_http_query(
+            schema,
+            "get",
+            {},
+            query_data=dict(
+                query="""
+                query TestQuery { test }
+                mutation TestMutation { writeTest { test } }
+                """,
+                operationName="TestMutation",
+            ),
+        )
 
-#     assert response.status_code == 405
-#     assert response_json(response) == {
-#         'errors': [
-#             {
-#                 'message': 'Can only perform a mutation operation'
-#                            ' from a POST request.'
-#             }
-#         ]
-#     }
-
-
-# def test_allows_mutation_to_exist_within_a_get(client):
-#     response = client.get(url_string(
-#         query='''
-#         query TestQuery { test }
-#         mutation TestMutation { writeTest { test } }
-#         ''',
-#         operationName='TestQuery'
-#     ))
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {
-#         'data': {'test': "Hello World"}
-#     }
+    assert exc_info.value == HttpQueryError(
+        405,
+        "Can only perform a mutation operation from a POST request.",
+        headers={"Allow": "POST"},
+    )
 
 
-# def test_allows_post_with_json_encoding(client):
-#     response = client.post(
-#         url_string(), data=j(query="{test}"), content_type="application/json"
-#     )
-#
-#     assert response.status_code == 200
-#     assert response_json(response) == {"data": {"test": "Hello World"}}
+def test_allows_mutation_to_exist_within_a_get():
+    results, params = run_http_query(
+        schema,
+        "get",
+        {},
+        query_data=dict(
+            query="""
+            query TestQuery { test }
+            mutation TestMutation { writeTest { test } }
+            """,
+            operationName="TestQuery",
+        ),
+    )
+
+    assert results == [({"test": "Hello World"}, None)]
+
+
+def test_allows_post_with_json_encoding():
+    result = load_json_body('{"query": "{test}"}')
+    assert result == {"query": "{test}"}
 
 
 # def test_allows_sending_a_mutation_via_post(client):
@@ -380,39 +386,25 @@ def test_errors_when_sending_a_mutation_via_get():
 #     }
 
 
-# def test_handles_incomplete_json_bodies(client):
-#     response = client.post(
-#         url_string(), data='{"query":', content_type="application/json"
-#     )
-#
-#     assert response.status_code == 400
-#     assert response_json(response) == {
-#         "errors": [{"message": "POST body sent invalid JSON."}]
-#     }
+def test_handles_incomplete_json_bodies():
+    with raises(HttpQueryError) as exc_info:
+        load_json_body('{"query":')
+
+    assert exc_info.value == HttpQueryError(400, "POST body sent invalid JSON.")
 
 
-# def test_handles_plain_post_text(client):
-#     response = client.post(url_string(
-#         variables=json.dumps({'who': "Dolly"})
-#     ),
-#         data='query helloWho($who: String){ test(who: $who) }',
-#         content_type='text/plain'
-#     )
-#     assert response.status_code == 400
-#     assert response_json(response) == {
-#         'errors': [{'message': 'Must provide query string.'}]
-#     }
+def test_handles_plain_post_text():
+    with raises(HttpQueryError) as exc_info:
+        run_http_query(schema, "get", {}, query_data={})
+
+    assert exc_info.value == HttpQueryError(400, "Must provide query string.")
 
 
-# def test_handles_poorly_formed_variables(client):
-#     response = client.get(url_string(
-#         query='query helloWho($who: String){ test(who: $who) }',
-#         variables='who:You'
-#     ))
-#     assert response.status_code == 400
-#     assert response_json(response) == {
-#         'errors': [{'message': 'Variables are invalid JSON.'}]
-#     }
+def test_handles_poorly_formed_variables():
+    with raises(HttpQueryError) as exc_info:
+        load_json_variables("who:You")
+
+    assert exc_info.value == HttpQueryError(400, "Variables are invalid JSON.")
 
 
 def test_handles_unsupported_http_methods():
