@@ -79,20 +79,19 @@ def test_errors_when_missing_operation_name():
     )]
 
 
-# def test_errors_when_sending_a_mutation_via_get():
-#     results, params = run_http_query(schema, 'get', {}, query_data=dict(
-#         query='''
-#         mutation TestMutation { writeTest { test } }
-#         '''
-#     ))
+def test_errors_when_sending_a_mutation_via_get():
 
-#     assert executions_to_dict(results) == [{
-#         'errors': [
-#             {
-#                 'message': 'Can only perform a mutation operation from a POST request.'
-#             }
-#         ]
-#     }]
+    with raises(HttpQueryError) as exc_info:
+        run_http_query(schema, 'get', {}, query_data=dict(
+            query='''
+                mutation TestMutation { writeTest { test } }
+                '''
+        ))
+
+    assert exc_info.value == HttpQueryError(
+        405,
+        'Can only perform a mutation operation from a POST request.',
+        headers={"Allow": "POST"})
 
 
 # def test_errors_when_selecting_a_mutation_within_a_get(client):
