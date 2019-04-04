@@ -3,7 +3,7 @@ from collections import namedtuple
 from collections.abc import MutableMapping
 
 from graphql import (ExecutionResult, GraphQLError, execute, get_operation_ast,
-                     parse, validate, validate_schema)
+                     parse, validate)
 
 from .error import HttpQueryError
 
@@ -165,10 +165,6 @@ def execute_graphql_request(
     if not params.query:
         raise HttpQueryError(400, "Must provide query string.")
 
-    schema_validation_errors = validate_schema(schema)
-    if schema_validation_errors:
-        return ExecutionResult(data=None, errors=schema_validation_errors)
-
     try:
         document = parse(params.query)
     except GraphQLError as e:
@@ -187,6 +183,9 @@ def execute_graphql_request(
                 ),
                 headers={"Allow": "POST"},
             )
+
+    # Note: the schema is not validated here for performance reasons.
+    # This should be done only once when starting the server.
 
     validation_errors = validate(schema, document)
     if validation_errors:
