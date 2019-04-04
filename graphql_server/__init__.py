@@ -2,7 +2,6 @@ import json
 from collections import namedtuple
 from collections.abc import MutableMapping
 
-import six
 from graphql import (ExecutionResult, GraphQLError, execute, get_operation_ast,
                      parse, validate, validate_schema)
 
@@ -105,7 +104,7 @@ def json_encode(data, pretty=False):
 
 def load_json_variables(variables):
     # type: (Optional[Union[str, Dict]]) -> Optional[Dict]
-    if variables and isinstance(variables, six.string_types):
+    if variables and isinstance(variables, str):
         try:
             return json.loads(variables)
         except Exception:
