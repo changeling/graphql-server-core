@@ -1,4 +1,6 @@
+
 class HttpQueryError(Exception):
+
     def __init__(self, status_code, message=None, is_graphql_error=False, headers=None):
         self.status_code = status_code
         self.message = message
@@ -15,9 +17,5 @@ class HttpQueryError(Exception):
         )
 
     def __hash__(self):
-        if self.headers:
-            headers_hash = tuple(self.headers.items())
-        else:
-            headers_hash = None
-
+        headers_hash = tuple(self.headers.items()) if self.headers else None
         return hash((self.status_code, self.message, headers_hash))

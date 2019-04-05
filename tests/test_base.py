@@ -1,11 +1,16 @@
 from pytest import raises
 import json
 
+from graphql import GraphQLError, ExecutionResult
+
 from graphql_server import (
     json_encode,
     load_json_body,
+    encode_execution_results,
+    format_execution_result,
     run_http_query,
     GraphQLParams,
+    GraphQLResponse,
     HttpQueryError,
 )
 from .schema import schema
@@ -76,6 +81,25 @@ def test_reports_validation_errors():
     ]
 
 
+def test_non_dict_params_in_non_batch_query():
+    with raises(HttpQueryError) as exc_info:
+        # noinspection PyTypeChecker
+        run_http_query(schema, "get", "not a dict")  # type: ignore
+
+    assert exc_info.value == HttpQueryError(
+        400, "GraphQL params should be a dict. Received 'not a dict'."
+    )
+
+
+def test_empty_batch_in_batch_query():
+    with raises(HttpQueryError) as exc_info:
+        run_http_query(schema, "get", [], batch_enabled=True)
+
+    assert exc_info.value == HttpQueryError(
+        400, "Received an empty list in the batch request."
+    )
+
+
 def test_errors_when_missing_operation_name():
     results, params = run_http_query(
         schema,
@@ -102,7 +126,7 @@ def test_errors_when_missing_operation_name():
             ],
         )
     ]
-    assert results[0].errors[0].__class__.__name__ == 'GraphQLError'
+    assert isinstance(results[0].errors[0], GraphQLError)
 
 
 def test_errors_when_sending_a_mutation_via_get():
@@ -123,6 +147,22 @@ def test_errors_when_sending_a_mutation_via_get():
         "Can only perform a mutation operation from a POST request.",
         headers={"Allow": "POST"},
     )
+
+
+def test_catching_errors_when_sending_a_mutation_via_get():
+    results, params = run_http_query(
+        schema,
+        "get",
+        {},
+        query_data=dict(
+            query="""
+                mutation TestMutation { writeTest { test } }
+                """
+        ),
+        catch=True,
+    )
+
+    assert results == [None]
 
 
 def test_errors_when_selecting_a_mutation_within_a_get():
@@ -352,7 +392,7 @@ def test_handles_errors_caused_by_a_lack_of_query():
 def test_handles_errors_caused_by_invalid_query_type():
     results, params = run_http_query(schema, "get", dict(query=42))
 
-    assert results == [(None, [{'message': 'Must provide Source. Received: 42'}])]
+    assert results == [(None, [{"message": "Must provide Source. Received: 42"}])]
 
 
 def test_handles_batch_correctly_if_is_disabled():
@@ -391,6 +431,15 @@ def test_handles_poorly_formed_variables():
         )
 
     assert exc_info.value == HttpQueryError(400, "Variables are invalid JSON.")
+
+
+def test_handles_bad_schema():
+    with raises(TypeError) as exc_info:
+        # noinspection PyTypeChecker
+        run_http_query("not a schema", "get", {})  # type: ignore
+
+    assert str(exc_info.value) == (
+        "Expected a GraphQL schema, but received 'not a schema'.")
 
 
 def test_handles_unsupported_http_methods():
@@ -470,3 +519,41 @@ def test_batch_allows_post_with_operation_name():
     results, params = run_http_query(schema, "post", data, batch_enabled=True)
 
     assert results == [({"test": "Hello World", "shared": "Hello Everyone"}, None)]
+
+
+def test_format_execution_result():
+    result = format_execution_result(None)
+    assert result == GraphQLResponse(None, 200)
+    data = {"answer": 42}
+    result = format_execution_result(ExecutionResult(data, None))
+    assert result == GraphQLResponse({"data": data}, 200)
+    errors = [GraphQLError("bad")]
+    result = format_execution_result(ExecutionResult(None, errors))
+    assert result == GraphQLResponse({"errors": errors}, 400)
+
+
+def test_encode_execution_results():
+    data = {"answer": 42}
+    errors = [GraphQLError("bad")]
+    results = [ExecutionResult(data, None), ExecutionResult(None, errors)]
+    result = encode_execution_results(results)
+    assert result == ('{"data":{"answer":42}}', 400)
+
+
+def test_encode_execution_results_batch():
+    data = {"answer": 42}
+    errors = [GraphQLError("bad")]
+    results = [ExecutionResult(data, None), ExecutionResult(None, errors)]
+    result = encode_execution_results(results, is_batch=True)
+    assert result == (
+        '[{"data":{"answer":42}},'
+        '{"errors":[{"message":"bad","locations":null,"path":null}]}]',
+        400,
+    )
+
+
+def test_encode_execution_results_not_encoded():
+    data = {"answer": 42}
+    results = [ExecutionResult(data, None)]
+    result = encode_execution_results(results, encode=lambda r: r)
+    assert result == ({"data": data}, 200)
