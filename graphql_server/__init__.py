@@ -46,7 +46,7 @@ def run_http_query(
 ):
     if not isinstance(schema, GraphQLSchema):
         raise TypeError(
-            f"Expected a GraphQL schema, but received {schema!r}."
+            f"Expected a GraphQL schema, but received {repr(schema)}."
         )
     if request_method not in ("get", "post"):
         raise HttpQueryError(
@@ -66,7 +66,7 @@ def run_http_query(
     if not is_batch:
         if not isinstance(data, (dict, MutableMapping)):
             raise HttpQueryError(
-                400, f"GraphQL params should be a dict. Received {data!r}."
+                400, f"GraphQL params should be a dict. Received {repr(data)}."
             )
         data = [data]
     elif not batch_enabled:
